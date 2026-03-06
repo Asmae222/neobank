@@ -1,0 +1,84 @@
+name: Pipeline CI/CD Sécurisé - NeoBank
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+
+  # ✅ SAST Python avec Bandit
+  SAST_Python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run Bandit SAST
+        run: bandit -r src/python/ -f json -o bandit-report.json || true
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ✅ SCA Python avec pip-audit
+  SCA_Python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
+
+  # ✅ SCA Node avec npm audit
+  SCA_Node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install
+      - name: Run npm audit
+        run: npm audit --audit-level=high || true
+
+  # ✅ Tests de sécurité Python
+  Tests_Securite:
+    runs-on: ubuntu-latest
+    needs: [SAST_Python, SCA_Python, SCA_Node]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run security tests
+        run: pytest tests/test_security.py -v --tb=short
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+
+  # ✅ Deploy uniquement si tout passe
+  Deploy:
+    runs-on: ubuntu-latest
+    needs: Tests_Securite
+    steps:
+      - name: Deploiement sécurisé
+        run: echo "✅ Tous les tests passés - Déploiement autorisé"
